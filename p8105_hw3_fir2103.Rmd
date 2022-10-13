@@ -1,0 +1,119 @@
+---
+title: "p8105_hw3_fir2103"
+author: "Farizah Rob"
+date: "2022-10-12"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+library(readxl)
+```
+
+```{r, eval = FALSE}
+library(tidyverse)
+
+knitr::opts_chunk$set(
+  fig.width = 6, 
+  fig.asp = .6, 
+  out.width = "90%"
+)
+
+theme_set(theme_minimal() + theme(legend.position="bottom"))
+
+options(
+  ggplot2.continuous.colour = "viridis", 
+  ggplot2.continuous.fill = "viridis"
+)
+
+scale_color_discrete <- scale_color_viridis_d
+scale_fill_discrete <- scale_fill_viridis_d
+```
+## Problem 1 
+
+```{r}
+library(p8105.datasets)
+data("instacart")
+```
+
+## Problem 2
+
+Load, tidy, and otherwise wrangle the data. Your final dataset should include all originally observed variables and values; have useful variable names; include a weekday vs weekend variable; and encode data with reasonable variable classes. Describe the resulting dataset (e.g. what variables exist, how many observations, etc).
+
+```{r}
+accel_data <- read_csv("./data/accel_data.csv") %>% 
+  janitor::clean_names() %>% 
+  mutate(weekday = if_else(day == "Saturday"| day == "Sunday", FALSE, TRUE)) %>%
+  relocate(weekday, .before = activity_1)
+```
+
+The dataset contains `r nrow(accel_data)` rows (observations) and `r ncol(accel_data)` columns (variables). The variables of the dataset are week, day_id, day, weekday (logical variable - TRUE if weekday, FALSE if weekend) and activity_1 to activity_1440, which are the activity counts for each minute of a 24-hour day starting at midnight. 
+
+Traditional analyses of accelerometer data focus on the total activity over the day. Using your tidied dataset, aggregate across minutes to create a total activity variable for each day, and create a table showing these totals. Are any trends apparent?
+
+```{r}
+accel_data <- accel_data %>%
+  rowwise() %>%
+  mutate(total_activity = sum(across(starts_with("activity")), na.rm = T)) %>%
+  relocate(total_activity, .before = activity_1)
+
+accel_data %>% 
+  group_by(day_id) %>%
+  select(day_id, day, weekday, total_activity) %>%
+  knitr::kable(digits = 1)
+```
+
+One trend apparent from the table is that there are two Saturdays where activity level was very low compared to the rest of the days (1440 activity counts). 
+
+Accelerometer data allows the inspection activity over the course of the day. Make a single-panel plot that shows the 24-hour activity time courses for each day and use color to indicate day of the week. Describe in words any patterns or conclusions you can make based on this graph.
+
+```{r}
+accel_data %>% 
+  pivot_longer(c(activity_1:activity_1440), 
+               names_to = "activity_time", 
+               values_to = "activity_count") %>% 
+  ggplot(aes(x = activity_time, y = activity_count, color = day)) +
+  geom_point() + geom_line()
+```
+
+Saturday, Monday, Tuesday -> seem to be lower (no large spikes)
+During the 24 hour period, in the first quarter of the day (morning) - activity is high followed by a slump and then higher towards the late/afternoon and evening. 
+
+Sunday afternoon/evening tend to have high activity, Saturday late night and early morning hours after midnight have more activity than other days (expected due to the weekend). 
+
+## Problem 3
+
+```{r}
+library(p8105.datasets)
+data("ny_noaa")
+```
+
+```{r}
+names(ny_noaa)
+
+ny_noaa %>% 
+  count(is.na(tmax))
+
+ny_noaa %>% 
+  count(is.na(tmin))
+
+ny_noaa %>% 
+  count(is.na(prcp))
+
+ny_noaa %>%
+  count(is.na(snow))
+
+ny_noaa %>% 
+  count(is.na(snwd))
+```
+
+The dataset has `r nrow(ny_noaa)` rows (observations) and `r ncol(ny_noaa)` columns (variables). The variables are id of the weather station, date (data is observed), prcp (precipitation in 10ths of mm), snow (in mm), snwd (snow depth in mm), tmax (maximum temperature in Celsius) and tmin (minimum temperature in Celsius). All weather data values are in integer form except tmax and tmin which are characters. 
+
+There are many missing values of tmax and tmin. For both tmax and tmin, about 44% of the values are missing. More than 50% of the prcp, snow, snwd values are non-missing so the main problem arises with the temperature values.
+
+```{r}
+ny_noaa <- ny_noaa %>%
+  janitor::clean_names() %>%
+  separate(date, c("year", "month", "day"), sep="-", convert = TRUE)
+```
+
