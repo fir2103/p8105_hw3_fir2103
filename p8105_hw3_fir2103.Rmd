@@ -2,16 +2,13 @@
 title: "p8105_hw3_fir2103"
 author: "Farizah Rob"
 date: "2022-10-12"
-output: html_document
+output: github_document
 ---
-
-```{r}
-library(tidyverse)
-library(readxl)
-```
 
 ```{r, eval = FALSE}
 library(tidyverse)
+library(patchwork)
+
 
 knitr::opts_chunk$set(
   fig.width = 6, 
@@ -43,23 +40,36 @@ Load, tidy, and otherwise wrangle the data. Your final dataset should include al
 ```{r}
 accel_data <- read_csv("./data/accel_data.csv") %>% 
   janitor::clean_names() %>% 
-  mutate(weekday = if_else(day == "Saturday"| day == "Sunday", FALSE, TRUE)) %>%
-  relocate(weekday, .before = activity_1)
+  mutate(day_type = as.factor(if_else(
+    day == "Saturday"| day == "Sunday", "weekend", "weekday")), 
+    day = factor(day, levels = c("Monday", "Tuesday", "Wednesday", 
+                              "Thursday", "Friday", "Saturday", 
+                              "Sunday")))%>%
+  relocate(day_type, .before = activity_1) %>%
+    pivot_longer(
+    c(activity_1:activity_1440),
+    names_to = "activity_min",
+    names_prefix = "activity_",
+    values_to = "activity_count"
+  ) %>%
+  arrange(day)
 ```
 
-The dataset contains `r nrow(accel_data)` rows (observations) and `r ncol(accel_data)` columns (variables). The variables of the dataset are week, day_id, day, weekday (logical variable - TRUE if weekday, FALSE if weekend) and activity_1 to activity_1440, which are the activity counts for each minute of a 24-hour day starting at midnight. 
+The tidied dataset contains `r nrow(accel_data)` rows (observations) and `r ncol(accel_data)` columns (variables). The variables of the dataset are week, day_id, day, weekday (factor variable), activity_min (the minute of the day), activity_count. 
 
 Traditional analyses of accelerometer data focus on the total activity over the day. Using your tidied dataset, aggregate across minutes to create a total activity variable for each day, and create a table showing these totals. Are any trends apparent?
 
 ```{r}
-accel_data <- accel_data %>%
-  rowwise() %>%
-  mutate(total_activity = sum(across(starts_with("activity")), na.rm = T)) %>%
-  relocate(total_activity, .before = activity_1)
-
+#looking for total activity by day, week
 accel_data %>% 
-  group_by(day_id) %>%
-  select(day_id, day, weekday, total_activity) %>%
+  group_by(day, week) %>%
+  summarize(total_activity = sum(activity_count)) %>%
+  pivot_wider(
+    id_cols = "day", 
+    names_from = "week", 
+    names_prefix = "week_", 
+    values_from = "total_activity"
+  ) %>%
   knitr::kable(digits = 1)
 ```
 
@@ -69,10 +79,7 @@ Accelerometer data allows the inspection activity over the course of the day. Ma
 
 ```{r}
 accel_data %>% 
-  pivot_longer(c(activity_1:activity_1440), 
-               names_to = "activity_time", 
-               values_to = "activity_count") %>% 
-  ggplot(aes(x = activity_time, y = activity_count, color = day)) +
+  ggplot(aes(x = activity_min, y = activity_count, color = day)) +
   geom_point() + geom_line()
 ```
 
@@ -114,6 +121,49 @@ There are many missing values of tmax and tmin. For both tmax and tmin, about 44
 ```{r}
 ny_noaa <- ny_noaa %>%
   janitor::clean_names() %>%
-  separate(date, c("year", "month", "day"), sep="-", convert = TRUE)
+  separate(date, c("year", "month", "day"), sep="-", convert = TRUE) %>%
+  mutate(tmax = as.numeric(tmax),
+         tmin = as.numeric(tmin), 
+         tmax = tmax/10, 
+         tmin = tmin/10,
+         prcp = prcp/10)
+
+#converted tmax and tmin to degrees Celsius (original data was in tenths of Celsius), converted prcp to mm (original was tenths of mm)
+
+```
+
+Two-panel plot showing average max temperature in January and in July in each station across years
+
+```{r}
+#how do I show the different stations? There are 750+ stations
+ny_noaa %>% filter(month %in% c(1,7)) %>% 
+  group_by(month, year, id) %>% 
+  summarize(
+    tmax_mean = mean(tmax, na.rm = TRUE)
+  ) %>% 
+  ggplot(aes(x = year, y = tmax_mean, group = id)) +
+  geom_line(alpha = 0.5) +
+  facet_grid(.~month)
+
+
+jan_temp <- ny_noaa %>%
+  group_by(id, year) %>%
+  filter(month == 1) %>%
+  summarize(mean_tmax = mean(tmax, na.rm = TRUE)) %>%
+  drop_na()
+
+july_temp <- ny_noaa %>%
+  group_by(id, year) %>%
+  filter(month == 7) %>%
+  summarize(mean_tmax = mean(tmax, na.rm = TRUE))
+
+jan_temp_plot <- jan_temp %>%
+  ggplot(aes(x = year, y = mean_tmax, group = id)) + geom_point() + theme(legend.position="none")
+
+july_temp_plot <- ggplot(data = july_temp, aes(x = year, y = mean_tmax, group = id)) + 
+  geom_point() + theme(legend.position="none")
+
+jan_temp_plot + july_temp_plot
+
 ```
 
