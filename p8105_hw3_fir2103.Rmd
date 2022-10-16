@@ -5,10 +5,9 @@ date: "2022-10-12"
 output: github_document
 ---
 
-```{r, eval = FALSE}
+```{r}
 library(tidyverse)
 library(patchwork)
-
 
 knitr::opts_chunk$set(
   fig.width = 6, 
@@ -26,16 +25,67 @@ options(
 scale_color_discrete <- scale_color_viridis_d
 scale_fill_discrete <- scale_fill_viridis_d
 ```
+
 ## Problem 1 
 
 ```{r}
 library(p8105.datasets)
 data("instacart")
+
+instacart <- 
+  instacart %>% 
+  as_tibble(instacart)
+```
+
+This dataset contains `r nrow(instacart)` rows and `r ncol(instacart)` columns, with each row resprenting a single product from an instacart order. Variables include identifiers for user, order, and product; the order in which each product was added to the cart. There are several order-level variables, describing the day and time of the order, and number of days since prior order. Then there are several item-specific variables, describing the product name (e.g. Yogurt, Avocado), department (e.g. dairy and eggs, produce), and aisle (e.g. yogurt, fresh fruits), and whether the item has been ordered by this user in the past. In total, there are `r instacart %>% select(product_id) %>% distinct %>% count` products found in `r instacart %>% select(user_id, order_id) %>% distinct %>% count` orders from `r instacart %>% select(user_id) %>% distinct %>% count` distinct users.
+
+Below is a table summarizing the number of items ordered from aisle. In total, there are 134 aisles, with fresh vegetables and fresh fruits holding the most items ordered by far.
+
+```{r}
+instacart %>% 
+  count(aisle) %>% 
+  arrange(desc(n))
+```
+
+Next is a plot that shows the number of items ordered in each aisle. Here, aisles are ordered by ascending number of items.
+
+```{r}
+instacart %>% 
+  count(aisle) %>% 
+  filter(n > 10000) %>% 
+  mutate(aisle = fct_reorder(aisle, n)) %>% 
+  ggplot(aes(x = aisle, y = n)) + 
+  geom_point() + 
+  labs(title = "Number of items ordered in each aisle") +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1))
+
+```
+
+Our next table shows the three most popular items in aisles `baking ingredients`, `dog food care`, and `packaged vegetables fruits`, and includes the number of times each item is ordered in your table.
+
+```{r}
+instacart %>% 
+  filter(aisle %in% c("baking ingredients", "dog food care", "packaged vegetables fruits")) %>%
+  group_by(aisle) %>% 
+  count(product_name) %>% 
+  mutate(rank = min_rank(desc(n))) %>% 
+  filter(rank < 4) %>% 
+  arrange(desc(n)) %>%
+  knitr::kable()
+```
+
+Finally is a table showing the mean hour of the day at which Pink Lady Apples and Coffee Ice Cream are ordered on each day of the week. This table has been formatted in an untidy manner for human readers. Pink Lady Apples are generally purchased slightly earlier in the day than Coffee Ice Cream, with the exception of day 5.
+
+```{r}
+instacart %>%
+  filter(product_name %in% c("Pink Lady Apples", "Coffee Ice Cream")) %>%
+  group_by(product_name, order_dow) %>%
+  summarize(mean_hour = mean(order_hour_of_day)) %>%
+  spread(key = order_dow, value = mean_hour) %>%
+  knitr::kable(digits = 2)
 ```
 
 ## Problem 2
-
-Load, tidy, and otherwise wrangle the data. Your final dataset should include all originally observed variables and values; have useful variable names; include a weekday vs weekend variable; and encode data with reasonable variable classes. Describe the resulting dataset (e.g. what variables exist, how many observations, etc).
 
 ```{r}
 accel_data <- read_csv("./data/accel_data.csv") %>% 
@@ -52,18 +102,18 @@ accel_data <- read_csv("./data/accel_data.csv") %>%
     names_prefix = "activity_",
     values_to = "activity_count"
   ) %>%
+  mutate(activity_min = as.numeric(activity_min)) %>%
   arrange(day)
 ```
 
-The tidied dataset contains `r nrow(accel_data)` rows (observations) and `r ncol(accel_data)` columns (variables). The variables of the dataset are week, day_id, day, weekday (factor variable), activity_min (the minute of the day), activity_count. 
+* The tidied dataset contains `r nrow(accel_data)` rows (observations) and `r ncol(accel_data)` columns (variables). The variables of the dataset are week, day_id, day, weekday (factor variable), activity_min (the minute of the day), activity_count. 
 
-Traditional analyses of accelerometer data focus on the total activity over the day. Using your tidied dataset, aggregate across minutes to create a total activity variable for each day, and create a table showing these totals. Are any trends apparent?
 
+Total activity (24-hour, aggregated all minutes) by day, week
 ```{r}
-#looking for total activity by day, week
 accel_data %>% 
   group_by(day, week) %>%
-  summarize(total_activity = sum(activity_count)) %>%
+  summarize(total_activity = as.integer(sum(activity_count))) %>%
   pivot_wider(
     id_cols = "day", 
     names_from = "week", 
@@ -72,28 +122,47 @@ accel_data %>%
   ) %>%
   knitr::kable(digits = 1)
 ```
+* One trend apparent from the table is that  the Saturday from week 3 and week 4 have unusually low activity counts (both are 1440). Monday of week 1 has lower activity count than typical Monday activity counts. 
 
-One trend apparent from the table is that there are two Saturdays where activity level was very low compared to the rest of the days (1440 activity counts). 
-
-Accelerometer data allows the inspection activity over the course of the day. Make a single-panel plot that shows the 24-hour activity time courses for each day and use color to indicate day of the week. Describe in words any patterns or conclusions you can make based on this graph.
-
+Single-panel plot for activity counts over the course of the 24-hour period by day 
 ```{r}
-accel_data %>% 
+activity_plot <- accel_data %>% 
   ggplot(aes(x = activity_min, y = activity_count, color = day)) +
-  geom_point() + geom_line()
+  geom_point(size = 0.2) + geom_line() +
+  scale_x_continuous(breaks=c(0, 180, 360, 540, 720, 900, 1080, 1260, 1440)) + 
+  labs(x = "Activity Time", y = "Activity Count", title = "Activity count over 24-hour period")
+
+activity_plot
+
+ggsave("./results/problem_2_plot.pdf")
 ```
 
-Saturday, Monday, Tuesday -> seem to be lower (no large spikes)
-During the 24 hour period, in the first quarter of the day (morning) - activity is high followed by a slump and then higher towards the late/afternoon and evening. 
-
-Sunday afternoon/evening tend to have high activity, Saturday late night and early morning hours after midnight have more activity than other days (expected due to the weekend). 
+* Between 6 AM and 9 AM (360 and 540 minutes), activity counts for weekdays (Wednesday, Thursday) are higher than weekends.
+* Between 9 AM and 12 PM (540 and 720 minutes), activity counts are high - especially on Sundays. 
+* Between 12 PM and 4/5 PM, there is a slump in activity counts on almost all days.
+* After 6 PM (1080 minutes), there is an increase in activity, especially on Fridays (around 9 PM).
 
 ## Problem 3
 
 ```{r}
 library(p8105.datasets)
 data("ny_noaa")
+
+ny_noaa <- ny_noaa %>%
+  as_tibble(ny_noaa)
+
+ny_noaa <- ny_noaa %>%
+  janitor::clean_names() %>%
+  separate(date, c("year", "month", "day"), sep="-", convert = TRUE) %>%
+  mutate(month = month.abb[month],
+         tmax = as.numeric(tmax),
+         tmin = as.numeric(tmin), 
+         tmax = tmax/10, 
+         tmin = tmin/10,
+         prcp = prcp/10)
 ```
+
+Exploring missing values problem 
 
 ```{r}
 names(ny_noaa)
@@ -112,58 +181,61 @@ ny_noaa %>%
 
 ny_noaa %>% 
   count(is.na(snwd))
+
+snow_numbers <- ny_noaa %>%
+   group_by(snow) %>%
+   summarize(count = n()) %>%
+   arrange(desc(count))
 ```
 
-The dataset has `r nrow(ny_noaa)` rows (observations) and `r ncol(ny_noaa)` columns (variables). The variables are id of the weather station, date (data is observed), prcp (precipitation in 10ths of mm), snow (in mm), snwd (snow depth in mm), tmax (maximum temperature in Celsius) and tmin (minimum temperature in Celsius). All weather data values are in integer form except tmax and tmin which are characters. 
+* The dataset has `r nrow(ny_noaa)` rows (observations) and `r ncol(ny_noaa)` columns (variables). The variables are `id` of the weather station, `month`, `day`, `year`, `prcp` (precipitation in mm), `snow` (in mm), `snwd` (snow depth in mm), `tmax` (maximum temperature in Celsius) and `tmin` (minimum temperature in Celsius). All weather data values are in integer form except `tmax` and `tmin` which are characters. The dataset was tidied by transforming from wide to long format, by changing the activity count variables and `prcp` and `tmin`, `tmax` variables changed.
 
-There are many missing values of tmax and tmin. For both tmax and tmin, about 44% of the values are missing. More than 50% of the prcp, snow, snwd values are non-missing so the main problem arises with the temperature values.
+* There are many missing values of `tmax` and `tmin`. For both `tmax` and `tmin`, about 44% of the values are missing. More than 50% of the `prcp`, `snow`, `snwd` values are non-missing so the main problem arises with the temperature values.
 
-```{r}
-ny_noaa <- ny_noaa %>%
-  janitor::clean_names() %>%
-  separate(date, c("year", "month", "day"), sep="-", convert = TRUE) %>%
-  mutate(tmax = as.numeric(tmax),
-         tmin = as.numeric(tmin), 
-         tmax = tmax/10, 
-         tmin = tmin/10,
-         prcp = prcp/10)
+* For snowfall, the most common value is `0`. This is the case since if it snows, it only snows in most areas of New York from the months of November-February/March (therefore, not the majority of the year). 
 
-#converted tmax and tmin to degrees Celsius (original data was in tenths of Celsius), converted prcp to mm (original was tenths of mm)
-
-```
 
 Two-panel plot showing average max temperature in January and in July in each station across years
-
 ```{r}
-#how do I show the different stations? There are 750+ stations
-ny_noaa %>% filter(month %in% c(1,7)) %>% 
+avg_max_plot <- ny_noaa %>% filter(month %in% c("Jan","Jul")) %>% 
   group_by(month, year, id) %>% 
   summarize(
     tmax_mean = mean(tmax, na.rm = TRUE)
   ) %>% 
   ggplot(aes(x = year, y = tmax_mean, group = id)) +
   geom_line(alpha = 0.5) +
-  facet_grid(.~month)
+  facet_grid(. ~ month) +
+  labs(y = "Average Maximum Temperature", title = "Average Maximum Temperature in January vs July")
 
+avg_max_plot
 
-jan_temp <- ny_noaa %>%
-  group_by(id, year) %>%
-  filter(month == 1) %>%
-  summarize(mean_tmax = mean(tmax, na.rm = TRUE)) %>%
-  drop_na()
-
-july_temp <- ny_noaa %>%
-  group_by(id, year) %>%
-  filter(month == 7) %>%
-  summarize(mean_tmax = mean(tmax, na.rm = TRUE))
-
-jan_temp_plot <- jan_temp %>%
-  ggplot(aes(x = year, y = mean_tmax, group = id)) + geom_point() + theme(legend.position="none")
-
-july_temp_plot <- ggplot(data = july_temp, aes(x = year, y = mean_tmax, group = id)) + 
-  geom_point() + theme(legend.position="none")
-
-jan_temp_plot + july_temp_plot
-
+ggsave("./results/problem_3_plot_1.pdf")
 ```
+* Average temperatures in January are obviously much lower than July - most average temperatures across stations are within 10 degrees Celsius of each other. The trends are pretty constant more or less. 
+
+* There is an outlier in July 1986/1987 where the average maximum temperature at one station (15 degrees Celsius) was lower than the typical trend. There is a slight outlier around 1982 where the average maximum temperature was around -12 (lower than typical).
+
+
+Two-panel plot
+```{r}
+tmax_tmin_plot <- ny_noaa %>%
+  ggplot(aes(x = tmin, y = tmax)) + 
+  geom_hex(bins=40) + labs(x = "Minimum Temperature", 
+                           y = "Maximum Temperature", 
+                           subtitle = "Hexagonal Heatmap of Min Temp vs Max Temp")
+
+snow_plot <- ny_noaa %>% 
+  filter(snow > 0 & snow < 100) %>%
+  mutate(year = as.factor(year)) %>%
+  ggplot(aes(x = snow, color = year)) + 
+  geom_density() + theme(legend.key.size = unit(2, 'mm')) + 
+  labs(subtitle = "Density Plot of Snowfall (mm) over 1981-2010")
+
+temp_snow_plot <- tmax_tmin_plot + snow_plot
+
+temp_snow_plot
+
+ggsave("./results/problem_3_plot_2.pdf", temp_snow_plot, width = 10, height = 7)
+```
+
 
